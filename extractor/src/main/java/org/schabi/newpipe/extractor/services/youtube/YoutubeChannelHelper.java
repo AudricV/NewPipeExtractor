@@ -257,7 +257,7 @@ public final class YoutubeChannelHelper {
              * A {@code pageHeaderRenderer} channel header type.
              *
              * <p>
-             * This header returns only the channel's name and its avatar.
+             * This header returns only the channel's name and its avatar for system channels.
              * </p>
              */
             PAGE
