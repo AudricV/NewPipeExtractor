@@ -6,6 +6,7 @@ import org.schabi.newpipe.extractor.Page;
 import org.schabi.newpipe.extractor.comments.CommentsInfoItemExtractor;
 import org.schabi.newpipe.extractor.exceptions.ParsingException;
 import org.schabi.newpipe.extractor.localization.DateWrapper;
+import org.schabi.newpipe.extractor.localization.Localization;
 import org.schabi.newpipe.extractor.localization.TimeAgoParser;
 import org.schabi.newpipe.extractor.stream.Description;
 import org.schabi.newpipe.extractor.utils.Utils;
@@ -40,6 +41,8 @@ class YoutubeCommentsEUVMInfoItemExtractor implements CommentsInfoItemExtractor 
     private final String videoUrl;
     @Nonnull
     private final TimeAgoParser timeAgoParser;
+    @Nonnull
+    private final Localization localization;
 
     YoutubeCommentsEUVMInfoItemExtractor(
             @Nonnull final JsonObject commentViewModel,
@@ -47,13 +50,15 @@ class YoutubeCommentsEUVMInfoItemExtractor implements CommentsInfoItemExtractor 
             @Nonnull final JsonObject commentEntityPayload,
             @Nonnull final JsonObject engagementToolbarStateEntityPayload,
             @Nonnull final String videoUrl,
-            @Nonnull final TimeAgoParser timeAgoParser) {
+            @Nonnull final TimeAgoParser timeAgoParser,
+            @Nonnull final Localization localization) {
         this.commentViewModel = commentViewModel;
         this.commentRepliesRenderer = commentRepliesRenderer;
         this.commentEntityPayload = commentEntityPayload;
         this.engagementToolbarStateEntityPayload = engagementToolbarStateEntityPayload;
         this.videoUrl = videoUrl;
         this.timeAgoParser = timeAgoParser;
+        this.localization = localization;
     }
 
     @Override
@@ -98,7 +103,7 @@ class YoutubeCommentsEUVMInfoItemExtractor implements CommentsInfoItemExtractor 
         // Comments' text work in the same way as an attributed video description
         return new Description(
                 attributedDescriptionToHtml(commentEntityPayload.getObject(PROPERTIES)
-                        .getObject("content")), Description.HTML);
+                        .getObject("content"), localization), Description.HTML);
     }
 
     @Override

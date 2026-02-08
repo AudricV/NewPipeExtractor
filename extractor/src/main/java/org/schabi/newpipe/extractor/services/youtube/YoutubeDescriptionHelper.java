@@ -3,11 +3,15 @@ package org.schabi.newpipe.extractor.services.youtube;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isYoutubeServiceURL;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isYoutubeURL;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.compare;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.getPartialString;
 import static org.schabi.newpipe.extractor.utils.Utils.isNullOrEmpty;
 
 import com.grack.nanojson.JsonObject;
 
 import org.jsoup.nodes.Entities;
+import org.schabi.newpipe.extractor.localization.Localization;
+import org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.StringId;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -88,12 +92,13 @@ public final class YoutubeDescriptionHelper {
      * </p>
      *
      * @param attributedDescription the JSON object of the attributed description
+     * @param localization          the localization with which the request was made
      * @return the parsed description, in HTML format, as a string
      */
     @Nullable
     public static String attributedDescriptionToHtml(
-            @Nullable final JsonObject attributedDescription
-    ) {
+            @Nullable final JsonObject attributedDescription,
+            @Nonnull final Localization localization) {
         if (isNullOrEmpty(attributedDescription)) {
             return null;
         }
@@ -107,7 +112,7 @@ public final class YoutubeDescriptionHelper {
         // otherwise various assumptions made in runsToHtml may fail
         final List<Run> openers = new ArrayList<>();
         final List<Run> closers = new ArrayList<>();
-        addAllCommandRuns(attributedDescription, openers, closers);
+        addAllCommandRuns(attributedDescription, openers, closers, localization);
         addAllStyleRuns(attributedDescription, openers, closers);
 
         // Note that sorting this way might put closers with the same close position in the wrong
@@ -225,8 +230,8 @@ public final class YoutubeDescriptionHelper {
     private static void addAllCommandRuns(
             @Nonnull final JsonObject attributedDescription,
             @Nonnull final List<Run> openers,
-            @Nonnull final List<Run> closers
-    ) {
+            @Nonnull final List<Run> closers,
+            @Nonnull final Localization localization) {
         attributedDescription.getArray("commandRuns")
                 .stream()
                 .filter(JsonObject.class::isInstance)
@@ -257,24 +262,29 @@ public final class YoutubeDescriptionHelper {
 
                     final String open = "<a href=\"" + Entities.escape(url) + "\">";
                     final Function<String, String> transformContent = getTransformContentFun(
-                            run, isYoutubeUrl);
+                            run, isYoutubeUrl, localization);
 
                     openers.add(new Run(open, LINK_CLOSE, startIndex, transformContent));
                     closers.add(new Run(open, LINK_CLOSE, startIndex + length, transformContent));
                 });
     }
 
-    private static Function<String, String> getTransformContentFun(final JsonObject run,
-                                                                   final boolean isYoutube) {
-        final String accessibilityLabel = run.getObject("onTapOptions")
+    private static Function<String, String> getTransformContentFun(
+            @Nonnull final JsonObject run,
+            final boolean isYoutube,
+            @Nonnull final Localization localization) {
+        // accessibility labels are e.g. "Instagram Channel Link: instagram_profile_name"
+        final String accessibilityLabel = getPartialString(run.getObject("onTapOptions")
                 .getObject("accessibilityInfo")
-                .getString("accessibilityLabel", "")
-                // accessibility labels are e.g. "Instagram Channel Link: instagram_profile_name"
-                .replaceFirst(" Channel Link", "");
+                .getString("accessibilityLabel", ""),
+                StringId.VIDEO_DESCRIPTION_ACCESSIBILITY_TEXT_CHANNEL_LINK,
+                localization);
 
         final Function<String, String> transformContent;
         if (isYoutube
-                || accessibilityLabel.isEmpty() || accessibilityLabel.startsWith("YouTube: ")) {
+                || accessibilityLabel.isEmpty()
+                || compare(accessibilityLabel,
+                StringId.VIDEO_DESCRIPTION_ACCESSIBILITY_TEXT_YOUTUBE, localization)) {
             // if there is no accessibility label, or the link points to YouTube, cleanup the link
             // text, see LINK_CONTENT_CLEANER_REGEX's documentation for more details
             transformContent = (content) -> {

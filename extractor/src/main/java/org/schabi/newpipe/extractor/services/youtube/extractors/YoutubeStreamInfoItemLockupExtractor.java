@@ -1,5 +1,7 @@
 package org.schabi.newpipe.extractor.services.youtube.extractors;
 
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.StringId;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.compare;
 import static org.schabi.newpipe.extractor.utils.Utils.isNullOrEmpty;
 
 import com.grack.nanojson.JsonArray;
@@ -8,6 +10,7 @@ import com.grack.nanojson.JsonObject;
 import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.exceptions.ParsingException;
 import org.schabi.newpipe.extractor.localization.DateWrapper;
+import org.schabi.newpipe.extractor.localization.Localization;
 import org.schabi.newpipe.extractor.localization.TimeAgoParser;
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper;
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeChannelLinkHandlerFactory;
@@ -39,7 +42,6 @@ import javax.annotation.Nullable;
  */
 public class YoutubeStreamInfoItemLockupExtractor implements StreamInfoItemExtractor {
 
-    private static final String NO_VIEWS_LOWERCASE = "no views";
     // This approach is language dependant (en-GB)
     // Leading end space is voluntary included
     private static final String PREMIERES_TEXT = "Premieres ";
@@ -48,6 +50,7 @@ public class YoutubeStreamInfoItemLockupExtractor implements StreamInfoItemExtra
 
     private final JsonObject lockupViewModel;
     private final TimeAgoParser timeAgoParser;
+    private final Localization localization;
 
     private StreamType cachedStreamType;
     private String cachedName;
@@ -56,16 +59,12 @@ public class YoutubeStreamInfoItemLockupExtractor implements StreamInfoItemExtra
     private ChannelImageViewModel cachedChannelImageViewModel;
     private JsonArray cachedMetadataRows;
 
-    /**
-     * Creates an extractor of StreamInfoItems from a YouTube page.
-     *
-     * @param lockupViewModel The JSON page element
-     * @param timeAgoParser A parser of the textual dates or {@code null}.
-     */
-    public YoutubeStreamInfoItemLockupExtractor(final JsonObject lockupViewModel,
-                                                @Nullable final TimeAgoParser timeAgoParser) {
+    public YoutubeStreamInfoItemLockupExtractor(@Nonnull final JsonObject lockupViewModel,
+                                                @Nonnull final TimeAgoParser timeAgoParser,
+                                                @Nonnull final Localization localization) {
         this.lockupViewModel = lockupViewModel;
         this.timeAgoParser = timeAgoParser;
+        this.localization = localization;
     }
 
     @Override
@@ -323,11 +322,8 @@ public class YoutubeStreamInfoItemLockupExtractor implements StreamInfoItemExtra
 
     private long getViewCountFromViewCountText(@Nonnull final String viewCountText)
             throws NumberFormatException, ParsingException {
-        // These approaches are language dependent
-        if (viewCountText.toLowerCase().contains(NO_VIEWS_LOWERCASE)) {
+        if (compare(viewCountText, StringId.NO_VIEWS_CONTAINS, localization)) {
             return 0;
-        } else if (viewCountText.toLowerCase().contains("recommended")) {
-            return -1;
         }
 
         return Utils.mixedNumberWordToLong(viewCountText);

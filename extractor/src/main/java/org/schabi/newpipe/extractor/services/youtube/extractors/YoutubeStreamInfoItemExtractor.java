@@ -22,6 +22,10 @@ import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.RegexId;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.StringId;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.compare;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.parseStringWithRegex;
 import static org.schabi.newpipe.extractor.utils.Utils.isNullOrEmpty;
 
 import com.grack.nanojson.JsonArray;
@@ -30,6 +34,7 @@ import com.grack.nanojson.JsonObject;
 import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.exceptions.ParsingException;
 import org.schabi.newpipe.extractor.localization.DateWrapper;
+import org.schabi.newpipe.extractor.localization.Localization;
 import org.schabi.newpipe.extractor.localization.TimeAgoParser;
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper;
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeStreamLinkHandlerFactory;
@@ -48,29 +53,21 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.regex.Pattern;
 
 public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
 
-    private static final Pattern ACCESSIBILITY_DATA_VIEW_COUNT_REGEX =
-            Pattern.compile("([\\d,]+) views$");
-    private static final String NO_VIEWS_LOWERCASE = "no views";
-
     private final JsonObject videoInfo;
     private final TimeAgoParser timeAgoParser;
+    private final Localization localization;
     private StreamType cachedStreamType;
     private Boolean isPremiere;
 
-    /**
-     * Creates an extractor of StreamInfoItems from a YouTube page.
-     *
-     * @param videoInfoItem The JSON page element
-     * @param timeAgoParser A parser of the textual dates or {@code null}.
-     */
-    public YoutubeStreamInfoItemExtractor(final JsonObject videoInfoItem,
-                                          @Nullable final TimeAgoParser timeAgoParser) {
+    public YoutubeStreamInfoItemExtractor(@Nonnull final JsonObject videoInfoItem,
+                                          @Nonnull final TimeAgoParser timeAgoParser,
+                                          @Nonnull final Localization localization) {
         this.videoInfo = videoInfoItem;
         this.timeAgoParser = timeAgoParser;
+        this.localization = localization;
     }
 
     @Override
@@ -114,8 +111,9 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
 
     @Override
     public boolean isAd() throws ParsingException {
-        return isPremium() || getName().equals("[Private video]")
-                || getName().equals("[Deleted video]");
+        final String name = getName();
+        return isPremium() || compare(name, StringId.LIST_ITEMS_DELETED_VIDEO, localization)
+                || compare(name, StringId.LIST_ITEMS_PRIVATE_VIDEO, localization);
     }
 
     @Override
@@ -284,7 +282,7 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
         }
 
         final String textualUploadDate = getTextualUploadDate();
-        if (timeAgoParser != null && !isNullOrEmpty(textualUploadDate)) {
+        if (!isNullOrEmpty(textualUploadDate)) {
             try {
                 return timeAgoParser.parse(textualUploadDate);
             } catch (final ParsingException e) {
@@ -352,11 +350,8 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
     private long getViewCountFromViewCountText(@Nonnull final String viewCountText,
                                                final boolean isMixedNumber)
             throws NumberFormatException, ParsingException {
-        // These approaches are language dependent
-        if (viewCountText.toLowerCase().contains(NO_VIEWS_LOWERCASE)) {
+        if (compare(viewCountText, StringId.NO_VIEWS_CONTAINS, localization)) {
             return 0;
-        } else if (viewCountText.toLowerCase().contains("recommended")) {
-            return -1;
         }
 
         return isMixedNumber ? Utils.mixedNumberWordToLong(viewCountText)
@@ -365,19 +360,18 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
 
     private long getViewCountFromAccessibilityData()
             throws NumberFormatException, Parser.RegexException {
-        // These approaches are language dependent
         final String videoInfoTitleAccessibilityData = videoInfo.getObject("title")
                 .getObject("accessibility")
                 .getObject("accessibilityData")
                 .getString("label", "");
 
-        if (videoInfoTitleAccessibilityData.toLowerCase().endsWith(NO_VIEWS_LOWERCASE)) {
+        if (compare(videoInfoTitleAccessibilityData, StringId.NO_VIEWS_ENDS_WITH, localization)) {
             return 0;
         }
 
-        return Long.parseLong(Utils.removeNonDigitCharacters(
-                Parser.matchGroup1(ACCESSIBILITY_DATA_VIEW_COUNT_REGEX,
-                        videoInfoTitleAccessibilityData)));
+        return Long.parseLong(Utils.removeNonDigitCharacters(parseStringWithRegex(
+                videoInfoTitleAccessibilityData, RegexId.STREAM_ITEM_ACCESSIBILITY_DATA_VIEWS,
+                localization)));
     }
 
     @Nonnull
@@ -474,7 +468,7 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
         }
     }
 
-    private boolean isMembersOnly() throws ParsingException {
+    private boolean isMembersOnly() {
         return videoInfo.getArray("badges")
             .stream()
             .filter(JsonObject.class::isInstance)

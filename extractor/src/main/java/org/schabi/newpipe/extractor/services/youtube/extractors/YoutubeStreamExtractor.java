@@ -33,6 +33,8 @@ import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getJsonPostResponse;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getTextFromObject;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.compare;
+import static org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.getPartialString;
 import static org.schabi.newpipe.extractor.utils.Utils.isNullOrEmpty;
 
 import com.grack.nanojson.JsonArray;
@@ -52,8 +54,8 @@ import org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException;
 import org.schabi.newpipe.extractor.exceptions.PaidContentException;
 import org.schabi.newpipe.extractor.exceptions.ParsingException;
 import org.schabi.newpipe.extractor.exceptions.PrivateContentException;
-import org.schabi.newpipe.extractor.exceptions.YoutubeMusicPremiumContentException;
 import org.schabi.newpipe.extractor.exceptions.SignInConfirmNotBotException;
+import org.schabi.newpipe.extractor.exceptions.YoutubeMusicPremiumContentException;
 import org.schabi.newpipe.extractor.linkhandler.LinkHandler;
 import org.schabi.newpipe.extractor.localization.ContentCountry;
 import org.schabi.newpipe.extractor.localization.DateWrapper;
@@ -68,6 +70,7 @@ import org.schabi.newpipe.extractor.services.youtube.YoutubeMetaInfoHelper;
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper;
 import org.schabi.newpipe.extractor.services.youtube.YoutubeStreamHelper;
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeChannelLinkHandlerFactory;
+import org.schabi.newpipe.extractor.services.youtube.localization.LocalizationHelper.StringId;
 import org.schabi.newpipe.extractor.stream.AudioStream;
 import org.schabi.newpipe.extractor.stream.DeliveryMethod;
 import org.schabi.newpipe.extractor.stream.Description;
@@ -207,13 +210,15 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
         final var textObject = getVideoPrimaryInfoRenderer().getObject("dateText");
         final String rendererDateText = getTextFromObject(textObject);
+
+        final Localization localization = getExtractorLocalization();
         if (rendererDateText == null) {
             return null;
-        } else if (rendererDateText.startsWith(PREMIERED_ON)) { // Premiered on 21 Feb 2020
-            return rendererDateText.substring(PREMIERED_ON.length());
-        } else if (rendererDateText.startsWith(PREMIERED)) {
+        } else if (compare(rendererDateText, StringId.PREMIERED_ON, localization)) {
+            return getPartialString(rendererDateText, StringId.PREMIERED_ON, localization);
+        } else if (compare(rendererDateText, StringId.PREMIERED, localization)) {
             // Premiered 20 hours ago / Premiered Feb 21, 2020
-            return rendererDateText.substring(PREMIERED.length());
+            return getPartialString(rendererDateText, StringId.PREMIERED, localization);
         } else {
             return rendererDateText;
         }
@@ -229,10 +234,9 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         }
 
         try { // Premiered 20 hours ago
-            final var localization = new Localization("en");
-            return TimeAgoPatternsManager.getTimeAgoParserFor(localization).parse(dateText);
+            return getTimeAgoParser().parse(dateText);
         } catch (final ParsingException e) {
-            // Try other patterns first
+            // Try other patterns
         }
 
         return parseOptionalDate(dateText, "MMM dd, yyyy")
@@ -891,16 +895,17 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
         if (reason != null) {
             if (status.equalsIgnoreCase("login_required")) {
-                if (reason.contains("inappropriate for some users")) {
+                if (compare(reason, StringId.PLAYER_RESPONSE_ERROR_AGE_RESTRICTED, localization)) {
                     throw new AgeRestrictedContentException(
                             "This age-restricted video cannot be watched anonymously");
                 }
 
-                if (reason.contains("private")) {
+                if (compare(reason, StringId.PLAYER_RESPONSE_ERROR_PRIVATE, localization)) {
                     throw new PrivateContentException("This video is private");
                 }
 
-                if (reason.contains("a bot")) {
+                if (compare(reason, StringId.PLAYER_RESPONSE_ERROR_ANTI_BOT_SIGN_IN,
+                        localization)) {
                     throw new SignInConfirmNotBotException(
                             "YouTube probably temporarily blocked anonymous watch access with this"
                                     + " IP , got error " + status + ": \"" + reason + "\"");
@@ -908,20 +913,21 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             }
 
             if (status.equalsIgnoreCase("unplayable") || status.equalsIgnoreCase("error")) {
-                if (reason.contains("Music Premium")) {
+                if (compare(reason, StringId.PLAYER_RESPONSE_ERROR_MUSIC_PREMIUM, localization)) {
                     throw new YoutubeMusicPremiumContentException();
                 }
 
-                if (reason.contains("payment")) {
+                if (compare(reason, StringId.PLAYER_RESPONSE_ERROR_PAID, localization)) {
                     throw new PaidContentException("This video is a paid video");
                 }
 
-                if (reason.contains("members")) {
+                if (compare(reason, StringId.PLAYER_RESPONSE_ERROR_CHANNEL_MEMBERS_FIRST_OR_ONLY,
+                        localization)) {
                     throw new PaidContentException("This video is only available for members of "
                             + "the channel of this video");
                 }
 
-                if (reason.contains("country")) {
+                if (compare(reason, StringId.PLAYER_RESPONSE_ERROR_GEORESTRICTED, localization)) {
                     throw new GeographicRestrictionException(
                             "This video is not available in client's country.");
                 }
@@ -947,7 +953,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                     androidPoTokenResult);
         }
 
-        checkPlayabilityStatus(playerResponse.getObject(PLAYABILITY_STATUS));
+        checkPlayabilityStatus(playerResponse.getObject(PLAYABILITY_STATUS), localization);
         if (isPlayerResponseNotValid(playerResponse, videoId)) {
             throw new ExtractionException("ANDROID player response is not valid");
         }
@@ -1514,8 +1520,10 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
         final JsonArray contents = metadataRowRenderer.getArray("contents");
         final String license = getTextFromObject(contents.getObject(0));
-        return license != null
-                && "Licence".equals(getTextFromObject(metadataRowRenderer.getObject(TITLE)))
+        final String licenseTitle = getTextFromObject(metadataRowRenderer.getObject(TITLE));
+
+        return license != null && licenseTitle != null
+                && compare(licenseTitle, StringId.LICENSE, getExtractorLocalization())
                 ? license
                 : "YouTube licence";
     }

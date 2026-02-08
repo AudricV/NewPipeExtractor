@@ -270,13 +270,15 @@ public class YoutubeCommentsExtractor extends CommentsExtractor {
                 .getArray("mutations");
         final String videoUrl = getUrl();
         final TimeAgoParser timeAgoParser = getTimeAgoParser();
+        final Localization localization = getExtractorLocalization();
 
         for (final Object o : contents) {
             if (!(o instanceof JsonObject)) {
                 continue;
             }
 
-            collectCommentItem(mutations, (JsonObject) o, collector, videoUrl, timeAgoParser);
+            collectCommentItem(mutations, (JsonObject) o, collector, videoUrl, timeAgoParser,
+                    localization);
         }
     }
 
@@ -284,7 +286,8 @@ public class YoutubeCommentsExtractor extends CommentsExtractor {
                                     @Nonnull final JsonObject content,
                                     @Nonnull final CommentsInfoItemsCollector collector,
                                     @Nonnull final String videoUrl,
-                                    @Nonnull final TimeAgoParser timeAgoParser)
+                                    @Nonnull final TimeAgoParser timeAgoParser,
+                                    @Nonnull final Localization localization)
             throws ParsingException {
         if (content.has("commentThreadRenderer")) {
             final JsonObject commentThreadRenderer =
@@ -304,7 +307,8 @@ public class YoutubeCommentsExtractor extends CommentsExtractor {
                                 commentViewModel.getString("toolbarStateKey", ""))
                                 .getObject("engagementToolbarStateEntityPayload"),
                         videoUrl,
-                        timeAgoParser));
+                        timeAgoParser,
+                        localization));
             } else if (commentThreadRenderer.has("comment")) {
                 collector.commit(new YoutubeCommentsInfoItemExtractor(
                         commentThreadRenderer.getObject("comment")
@@ -326,7 +330,8 @@ public class YoutubeCommentsExtractor extends CommentsExtractor {
                             commentViewModel.getString("toolbarStateKey", ""))
                             .getObject("engagementToolbarStateEntityPayload"),
                     videoUrl,
-                    timeAgoParser));
+                    timeAgoParser,
+                    localization));
         } else if (content.has(COMMENT_RENDERER_KEY)) {
             // commentRenderers are directly returned for comment replies, so there is no
             // commentRepliesRenderer to provide
